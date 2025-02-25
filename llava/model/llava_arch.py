@@ -70,10 +70,10 @@ class LlavaMetaModel:
         self.config.mm_vision_select_feature = mm_vision_select_feature
 
         # add additional configs for segtok
-        self.config.feature_outs = model_args.feature_outs
-        self.config.img_size = model_args.img_size
-        self.config.vision_backbone = model_args.vision_backbone
-        self.config.segtok_posembed = model_args.segtok_posembed
+        # self.config.feature_outs = model_args.feature_outs
+        # self.config.img_size = model_args.img_size
+        # self.config.vision_backbone = model_args.vision_backbone
+        # self.config.segtok_posembed = model_args.segtok_posembed
 
         if getattr(self, 'mm_projector', None) is None:
             self.mm_projector = build_vision_projector(self.config)
@@ -116,8 +116,10 @@ class LlavaMetaForCausalLM(ABC):
         return self.get_model().get_vision_tower()
 
     def encode_images(self, images):
-        image_features = self.get_model().get_vision_tower()(images)
+        vision_tower = self.get_model().get_vision_tower()
+        image_features = vision_tower(images.to(vision_tower.dtype))
         image_features = self.get_model().mm_projector(image_features)
+        print(image_features.shape)
         return image_features
 
     def prepare_inputs_labels_for_multimodal(
@@ -125,6 +127,7 @@ class LlavaMetaForCausalLM(ABC):
     ):
         vision_tower = self.get_vision_tower()
         if vision_tower is None or images is None or input_ids.shape[1] == 1:
+            print("Preparing inputs for multimodal: None")
             if past_key_values is not None and vision_tower is not None and images is not None and input_ids.shape[1] == 1:
                 target_shape = past_key_values[-1][-1].shape[-2] + 1
                 attention_mask = torch.cat((attention_mask, torch.ones(
@@ -203,10 +206,12 @@ class LlavaMetaForCausalLM(ABC):
                 if i < num_images:
                     cur_image_features = image_features[cur_image_idx]
                     cur_image_idx += 1
+                    print(cur_image_features.shape)
                     cur_new_input_embeds.append(cur_image_features)
                     cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=cur_labels.device, dtype=cur_labels.dtype))
 
             cur_new_input_embeds = torch.cat(cur_new_input_embeds)
+            print(cur_new_input_embeds.shape)
             cur_new_labels = torch.cat(cur_new_labels)
 
             new_input_embeds.append(cur_new_input_embeds)
